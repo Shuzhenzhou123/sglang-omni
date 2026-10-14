@@ -113,7 +113,7 @@ def test_speech_preserves_reason_provenance_through_typed_and_serialized_results
 
 def test_speech_resamples_wav_to_requested_sample_rate() -> None:
     client = Client(
-        _SubmitStubCoordinator(
+        SubmitStubCoordinator(
             {
                 "audio_data": [0.0] * 24000,
                 "sample_rate": 24000,

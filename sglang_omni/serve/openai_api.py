@@ -223,6 +223,7 @@ def create_app(
     additional_speech_languages: frozenset[str] = frozenset(),
     supported_output_sample_rates: frozenset[int] = frozenset(),
     max_speech_input_chars: int | None = MAX_SPEECH_INPUT_CHARS,
+    supported_speech_fields: frozenset[str] | None = None,
     enable_realtime: bool = False,
     realtime_deployment: RealtimeDeployment | None = None,
     supports_realtime_audio_output: bool = False,
@@ -257,6 +258,9 @@ def create_app(
         supported_output_sample_rates: Target sample rates exposed by the pipeline.
         max_speech_input_chars: Maximum accepted input characters, or ``None``
             to defer length validation to model-specific context checks.
+        supported_speech_fields: Speech request fields the pipeline accepts;
+            other and unknown fields are refused before parsing. None accepts
+            every protocol field and ignores unknown ones.
         enable_realtime: If True, mount the WebSocket ``/v1/realtime``
             endpoint (OpenAI Realtime API).
         supports_realtime_audio_output: Whether the mounted realtime endpoint
@@ -323,6 +327,7 @@ def create_app(
         additional_speech_languages=additional_speech_languages,
         supported_output_sample_rates=supported_output_sample_rates,
         max_speech_input_chars=max_speech_input_chars,
+        supported_speech_fields=supported_speech_fields,
         allowed_local_media_path=allowed_local_media_path,
         allowed_media_domains=allowed_media_domains,
         voice_store=app.state.speaker_sample_store,
@@ -1625,14 +1630,25 @@ def register_speech(app: FastAPI) -> None:
             "X-Finish-Reason": result.finish_reason,
         }
         if result.usage is not None:
-            if result.usage.prompt_tokens is not None:
-                headers["X-Prompt-Tokens"] = str(result.usage.prompt_tokens)
-            else:
-                pass
-            if result.usage.completion_tokens is not None:
-                headers["X-Completion-Tokens"] = str(result.usage.completion_tokens)
-            else:
-                pass
+            headers.update(
+                {
+                    name: str(tokens)
+                    for name, tokens in (
+                        ("X-Prompt-Tokens", result.usage.prompt_tokens),
+                        ("X-Completion-Tokens", result.usage.completion_tokens),
+                        (
+                            "X-SGLang-Omni-Input-Tokens",
+                            result.usage.prompt_tokens,
+                        ),
+                        (
+                            "X-SGLang-Omni-Output-Tokens",
+                            result.usage.completion_tokens,
+                        ),
+                        ("X-SGLang-Omni-Total-Tokens", result.usage.total_tokens),
+                    )
+                    if tokens is not None
+                }
+            )
             if result.usage.engine_time_s is not None:
                 headers["X-Engine-Time"] = str(result.usage.engine_time_s)
             else:
